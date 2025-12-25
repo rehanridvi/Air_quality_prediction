@@ -1,5 +1,5 @@
 # Air_quality_prediction
-This project predicts air quality index using classification models.
+This project predicts air quality index using classification models. A real dataset has been used for all the district of Bangladesh.
 
 # Model applied: 
 Random Forest, Decision Tree, KNN, XGBoost, AdaBoost, LGBM Classifier, CatBoost and Neural Network.
