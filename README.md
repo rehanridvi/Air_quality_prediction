@@ -1,88 +1,356 @@
-# 🧠 Alzheimer Disease Classification
+# 🌫️ Air Quality Index (AQI) Classification — Bangladesh
 
-End-to-end machine learning pipeline to classify Alzheimer's disease from patient data — covering EDA → preprocessing → feature scaling → dataset splitting → 3-model training → confusion-matrix evaluation.
-# Dataset link: 
-https://www.kaggle.com/datasets/tahmidmir/air-quality-index-of-bangladesh-dataset
+End-to-end machine learning pipeline to predict **Air Quality Index categories** across 16 locations in Bangladesh, using meterological and temporal data. Covers data cleaning → feature engineering → EDA → 8-model training (ML + deep learning) → credit-standard evaluation → confusion matrix analysis.
 
-# Kaggle Link: 
-https://www.kaggle.com/code/sacklinenaienridvi/air-quality-project-cse427/edit
-
-**🏆 Best Model: Decision Tree — 87.44% Accuracy**
+**🏆 Best Model: XGBoost — 74.11% Accuracy**
 
 ---
 
 ## 📈 Results
 
-| Model | Accuracy |
-|---|---|
-| **Decision Tree** ✅ | **87.44%** |
-| Logistic Regression | 84.03% |
-| K-Nearest Neighbours (KNN) | 73.48% |
+### Baseline Model Comparison (30% held-out test set — 154,297 samples)
 
-Evaluated on a 30% held-out test split. **Decision Tree wins** on accuracy, while **Logistic Regression** remains a strong contender for probabilistic classification. **KNN lags** — likely due to overfitting/underfitting on the scaled feature space.
+| Model | Accuracy | MAE | MSE | Notes |
+|---|---|---|---|---|
+| **XGBoost** 🥇 | **0.7411** | **0.2891** | **0.3497** | Best on all metrics |
+| Random Forest | 0.7568 | — | — | Baseline RF (100 trees, depth 20) |
+| LightGBM | 0.7168 | 0.3180 | 0.3875 | Close runner-up |
+| Neural Network | 0.7169 | 0.3182 | 0.3884 | 3-layer MLP + BatchNorm |
+| Decision Tree | 0.7129 | 0.3232 | 0.3953 | Entropy criterion |
+| KNN | 0.7101 | 0.3266 | 0.4002 | Distance-weighted, Manhattan |
+| CatBoost | 0.7059 | 0.3294 | 0.4001 | Tuned depth 8 |
+| AdaBoost | 0.6618 | 0.3844 | 0.4770 | Weakest performer |
 
-Confusion matrices were generated for all three models to expose misclassification patterns beyond raw accuracy.
+Evaluated on a 20% held-out test split from 944,182 total records. **XGBoost wins decisively on continuous error metrics (MAE/MSE)** while Random Forest and XGBoost are neck-and-neck on raw accuracy — confirming that **tree-based ensembles dominate this feature space**, but the neural network and LightGBM remain strong contenders.
+
+### Per-Class Performance (XGBoost)
+
+| Class | Precision | Recall | F1-score | Support |
+|---|---|---|---|---|
+| 0 (Good) | 0.79 | 0.82 | 0.81 | 69,987 |
+| 1 (Moderate) | 0.70 | 0.68 | 0.69 | 57,664 |
+| 2 (Unhealthy) | 0.69 | 0.67 | 0.68 | 26,646 |
 
 ---
 
 ## 📊 Dataset
 
-- **Source:** [Alzheimer's Disease Dataset (Kaggle)](https://www.kaggle.com/datasets/rabieelkharoua/alzheimers-disease-dataset/data)
-- **Size:** 2,149 data points · 35 features
-- **Task:** Binary classification — predicting Alzheimer's diagnosis
-- **Class balance:** Imbalanced (classes do not have equal instance counts)
+- **Source:** [Air Quality Index of Bangladesh (Kaggle)](https://www.kaggle.com/datasets) — `air_quality_index_dataset.xlsx`
+- **Size:** 944,182 records across 16 monitoring stations
+- **Task:** Multiclass classification — **Good / Moderate / Unhealthy** (3 classes, based on PM2.5 thresholds)
+- **Class distribution:** Imbalanced — Good: 350,697 · Moderate: 287,490 · Unhealthy: 133,298
+- **Locations:** Rajshahi, BARC, Gazipur, Darussalam, Agrabad Chittagong, Barishal, Khulna, Sylhet, TV st-Chittagong, Narayonganj, Sangsad, Rangpur, Cumilla, Mymansingh, Narsingdi, Savar
 
-| Feature Type | Count | Examples |
-|---|---|---|
-| Categorical | 18 | Gender, Ethnicity, EducationLevel, Smoking, FamilyHistoryAlzheimers, Depression, Hypertension, MemoryComplaints, BehavioralProblems, Forgetfulness, Diagnosis (target) |
-| Quantitative | 17 | Age, BMI, AlcoholConsumption, PhysicalActivity, DietQuality, SleepQuality, SystolicBP, CholesterolTotal/LDL/HDL, MMSE, FunctionalAssessment, ADL, PatientID, DoctorInCharge |
+### Raw Features (23 columns)
 
----
-
-## 🧹 Data Preprocessing
-
-- **Null values handled:** 5,075 total nulls — highest in `DoctorInCharge` and `PatientID`
-  - **Solution:** Both columns dropped (no predictive value from null-heavy administrative/ID fields)
-- **Categorical encoding:** Label encoding applied
-  - Gender → Male: 0, Female: 1
-  - Ethnicity → Caucasian: 0, African American: 1, Asian: 2, Other: 3
-  - Education → None: 0, High School: 1, Bachelor's: 2, Higher: 3
-- **Feature scaling:** Applied to quantitative features
-- **Final cleaned records:** 2,149 (all rows retained after column drops)
+| Group | Features |
+|---|---|
+| Temporal | Date, Time, Location |
+| Pollutants | SO2, NO, NO2, NOX, CO, CO 8hr, O3, O3 8hr, PM2.5, PM10 |
+| Weather | Wind Speed, Wind Dir, Temperature, RH, Solar Rad, BP, Rain, V Wind Speed |
 
 ---
 
-## ✂️ Dataset Splitting
+## 🧹 Data Cleaning
 
-- **Train/Test:** 70% training (≈1,504 rows) / 30% testing (≈645 rows)
+- **Columns dropped (16):** `Unnamed: 20`, `Unnamed: 21`, `Rain`, `V Wind Speed`, `CO 8hr`, `O3 8hr`, `CO`, `NO`, `NO2`, `NOX`, `SO2`, `O3`, `PM10`, `Solar Rad`, `BP`, `Wind Dir` — high null rates (some >85%) made them unusable
+- **Datetime handling:** Date + Time merged into a single `Datetime` column; original columns dropped
+- **Numeric parsing:** Comma-to-dot replacement applied to `PM2.5`, `Temperature`, `RH`, `Wind Speed`, then coerced to float
+- **Missing value strategy:**
+  - Location-wise median imputation for `PM2.5`, `Temperature`, `RH`, `Wind Speed`
+  - Global median fallback for remaining gaps
+- **Final cleaned features (6):** `Temperature`, `RH`, `Wind Speed`, `Hour`, `Day`, `Month`
+
+---
+
+## 🏷️ Feature Engineering
+
+- **AQI category** derived from PM2.5 thresholds:
+  - `PM2.5 ≤ 50` → **Good** (label 0)
+  - `50 < PM2.5 ≤ 100` → **Moderate** (label 1)
+  - `PM2.5 > 100` → **Unhealthy** (label 2)
+- **Temporal features extracted:** Hour, Day, Month, Weekday
+- **Label encoding** applied to AQI categories
+- **Correlation heatmap** revealed temperature and RH as strongest predictors
 
 ---
 
 ## 🔄 Pipeline
-alzheimers_disease_data.csv
-→ Data Exploration + Correlation with labels
-→ Preprocessing (null handling, label encoding)
-→ Feature Scaling
-→ 70/30 Train-Test Split
-→ Model Training: Logistic Regression | Decision Tree | KNN
-→ Model Selection (accuracy comparison)
-→ Confusion Matrix Analysis
-→ Conclusion
+# 🌫️ Air Quality Index (AQI) Classification — Bangladesh
 
+End-to-end machine learning pipeline to predict **Air Quality Index categories** across 16 locations in Bangladesh, using meterological and temporal data. Covers data cleaning → feature engineering → EDA → 8-model training (ML + deep learning) → credit-standard evaluation → confusion matrix analysis.
+
+**🏆 Best Model: XGBoost — 74.11% Accuracy**
+
+---
+
+## 📈 Results
+
+### Baseline Model Comparison (30% held-out test set — 154,297 samples)
+
+| Model | Accuracy | MAE | MSE | Notes |
+|---|---|---|---|---|
+| **XGBoost** 🥇 | **0.7411** | **0.2891** | **0.3497** | Best on all metrics |
+| Random Forest | 0.7568 | — | — | Baseline RF (100 trees, depth 20) |
+| LightGBM | 0.7168 | 0.3180 | 0.3875 | Close runner-up |
+| Neural Network | 0.7169 | 0.3182 | 0.3884 | 3-layer MLP + BatchNorm |
+| Decision Tree | 0.7129 | 0.3232 | 0.3953 | Entropy criterion |
+| KNN | 0.7101 | 0.3266 | 0.4002 | Distance-weighted, Manhattan |
+| CatBoost | 0.7059 | 0.3294 | 0.4001 | Tuned depth 8 |
+| AdaBoost | 0.6618 | 0.3844 | 0.4770 | Weakest performer |
+
+Evaluated on a 20% held-out test split from 944,182 total records. **XGBoost wins decisively on continuous error metrics (MAE/MSE)** while Random Forest and XGBoost are neck-and-neck on raw accuracy — confirming that **tree-based ensembles dominate this feature space**, but the neural network and LightGBM remain strong contenders.
+
+### Per-Class Performance (XGBoost)
+
+| Class | Precision | Recall | F1-score | Support |
+|---|---|---|---|---|
+| 0 (Good) | 0.79 | 0.82 | 0.81 | 69,987 |
+| 1 (Moderate) | 0.70 | 0.68 | 0.69 | 57,664 |
+| 2 (Unhealthy) | 0.69 | 0.67 | 0.68 | 26,646 |
+
+---
+
+## 📊 Dataset
+
+- **Source:** [Air Quality Index of Bangladesh (Kaggle)](https://www.kaggle.com/datasets) — `air_quality_index_dataset.xlsx`
+- **Size:** 944,182 records across 16 monitoring stations
+- **Task:** Multiclass classification — **Good / Moderate / Unhealthy** (3 classes, based on PM2.5 thresholds)
+- **Class distribution:** Imbalanced — Good: 350,697 · Moderate: 287,490 · Unhealthy: 133,298
+- **Locations:** Rajshahi, BARC, Gazipur, Darussalam, Agrabad Chittagong, Barishal, Khulna, Sylhet, TV st-Chittagong, Narayonganj, Sangsad, Rangpur, Cumilla, Mymansingh, Narsingdi, Savar
+
+### Raw Features (23 columns)
+
+| Group | Features |
+|---|---|
+| Temporal | Date, Time, Location |
+| Pollutants | SO2, NO, NO2, NOX, CO, CO 8hr, O3, O3 8hr, PM2.5, PM10 |
+| Weather | Wind Speed, Wind Dir, Temperature, RH, Solar Rad, BP, Rain, V Wind Speed |
+
+---
+
+## 🧹 Data Cleaning
+
+- **Columns dropped (16):** `Unnamed: 20`, `Unnamed: 21`, `Rain`, `V Wind Speed`, `CO 8hr`, `O3 8hr`, `CO`, `NO`, `NO2`, `NOX`, `SO2`, `O3`, `PM10`, `Solar Rad`, `BP`, `Wind Dir` — high null rates (some >85%) made them unusable
+- **Datetime handling:** Date + Time merged into a single `Datetime` column; original columns dropped
+- **Numeric parsing:** Comma-to-dot replacement applied to `PM2.5`, `Temperature`, `RH`, `Wind Speed`, then coerced to float
+- **Missing value strategy:**
+  - Location-wise median imputation for `PM2.5`, `Temperature`, `RH`, `Wind Speed`
+  - Global median fallback for remaining gaps
+- **Final cleaned features (6):** `Temperature`, `RH`, `Wind Speed`, `Hour`, `Day`, `Month`
+
+---
+
+## 🏷️ Feature Engineering
+
+- **AQI category** derived from PM2.5 thresholds:
+  - `PM2.5 ≤ 50` → **Good** (label 0)
+  - `50 < PM2.5 ≤ 100` → **Moderate** (label 1)
+  - `PM2.5 > 100` → **Unhealthy** (label 2)
+- **Temporal features extracted:** Hour, Day, Month, Weekday
+- **Label encoding** applied to AQI categories
+- **Correlation heatmap** revealed temperature and RH as strongest predictors
+
+---
+
+## 🔄 Pipeline
+# 🌫️ Air Quality Index (AQI) Classification — Bangladesh
+
+End-to-end machine learning pipeline to predict **Air Quality Index categories** across 16 locations in Bangladesh, using meterological and temporal data. Covers data cleaning → feature engineering → EDA → 8-model training (ML + deep learning) → credit-standard evaluation → confusion matrix analysis.
+
+**🏆 Best Model: XGBoost — 74.11% Accuracy**
+
+---
+
+## 📈 Results
+
+### Baseline Model Comparison (30% held-out test set — 154,297 samples)
+
+| Model | Accuracy | MAE | MSE | Notes |
+|---|---|---|---|---|
+| **XGBoost** 🥇 | **0.7411** | **0.2891** | **0.3497** | Best on all metrics |
+| Random Forest | 0.7568 | — | — | Baseline RF (100 trees, depth 20) |
+| LightGBM | 0.7168 | 0.3180 | 0.3875 | Close runner-up |
+| Neural Network | 0.7169 | 0.3182 | 0.3884 | 3-layer MLP + BatchNorm |
+| Decision Tree | 0.7129 | 0.3232 | 0.3953 | Entropy criterion |
+| KNN | 0.7101 | 0.3266 | 0.4002 | Distance-weighted, Manhattan |
+| CatBoost | 0.7059 | 0.3294 | 0.4001 | Tuned depth 8 |
+| AdaBoost | 0.6618 | 0.3844 | 0.4770 | Weakest performer |
+
+Evaluated on a 20% held-out test split from 944,182 total records. **XGBoost wins decisively on continuous error metrics (MAE/MSE)** while Random Forest and XGBoost are neck-and-neck on raw accuracy — confirming that **tree-based ensembles dominate this feature space**, but the neural network and LightGBM remain strong contenders.
+
+### Per-Class Performance (XGBoost)
+
+| Class | Precision | Recall | F1-score | Support |
+|---|---|---|---|---|
+| 0 (Good) | 0.79 | 0.82 | 0.81 | 69,987 |
+| 1 (Moderate) | 0.70 | 0.68 | 0.69 | 57,664 |
+| 2 (Unhealthy) | 0.69 | 0.67 | 0.68 | 26,646 |
+
+---
+
+## 📊 Dataset
+
+- **Source:** [Air Quality Index of Bangladesh (Kaggle)](https://www.kaggle.com/datasets) — `air_quality_index_dataset.xlsx`
+- **Size:** 944,182 records across 16 monitoring stations
+- **Task:** Multiclass classification — **Good / Moderate / Unhealthy** (3 classes, based on PM2.5 thresholds)
+- **Class distribution:** Imbalanced — Good: 350,697 · Moderate: 287,490 · Unhealthy: 133,298
+- **Locations:** Rajshahi, BARC, Gazipur, Darussalam, Agrabad Chittagong, Barishal, Khulna, Sylhet, TV st-Chittagong, Narayonganj, Sangsad, Rangpur, Cumilla, Mymansingh, Narsingdi, Savar
+
+### Raw Features (23 columns)
+
+| Group | Features |
+|---|---|
+| Temporal | Date, Time, Location |
+| Pollutants | SO2, NO, NO2, NOX, CO, CO 8hr, O3, O3 8hr, PM2.5, PM10 |
+| Weather | Wind Speed, Wind Dir, Temperature, RH, Solar Rad, BP, Rain, V Wind Speed |
+
+---
+
+## 🧹 Data Cleaning
+
+- **Columns dropped (16):** `Unnamed: 20`, `Unnamed: 21`, `Rain`, `V Wind Speed`, `CO 8hr`, `O3 8hr`, `CO`, `NO`, `NO2`, `NOX`, `SO2`, `O3`, `PM10`, `Solar Rad`, `BP`, `Wind Dir` — high null rates (some >85%) made them unusable
+- **Datetime handling:** Date + Time merged into a single `Datetime` column; original columns dropped
+- **Numeric parsing:** Comma-to-dot replacement applied to `PM2.5`, `Temperature`, `RH`, `Wind Speed`, then coerced to float
+- **Missing value strategy:**
+  - Location-wise median imputation for `PM2.5`, `Temperature`, `RH`, `Wind Speed`
+  - Global median fallback for remaining gaps
+- **Final cleaned features (6):** `Temperature`, `RH`, `Wind Speed`, `Hour`, `Day`, `Month`
+
+---
+
+## 🏷️ Feature Engineering
+
+- **AQI category** derived from PM2.5 thresholds:
+  - `PM2.5 ≤ 50` → **Good** (label 0)
+  - `50 < PM2.5 ≤ 100` → **Moderate** (label 1)
+  - `PM2.5 > 100` → **Unhealthy** (label 2)
+- **Temporal features extracted:** Hour, Day, Month, Weekday
+- **Label encoding** applied to AQI categories
+- **Correlation heatmap** revealed temperature and RH as strongest predictors
+
+---
+
+## 🔄 Pipeline
+# 🌫️ Air Quality Index (AQI) Classification — Bangladesh
+
+End-to-end machine learning pipeline to predict **Air Quality Index categories** across 16 locations in Bangladesh, using meterological and temporal data. Covers data cleaning → feature engineering → EDA → 8-model training (ML + deep learning) → credit-standard evaluation → confusion matrix analysis.
+
+**🏆 Best Model: XGBoost — 74.11% Accuracy**
+
+---
+
+## 📈 Results
+
+### Baseline Model Comparison (30% held-out test set — 154,297 samples)
+
+| Model | Accuracy | MAE | MSE | Notes |
+|---|---|---|---|---|
+| **XGBoost** 🥇 | **0.7411** | **0.2891** | **0.3497** | Best on all metrics |
+| Random Forest | 0.7568 | — | — | Baseline RF (100 trees, depth 20) |
+| LightGBM | 0.7168 | 0.3180 | 0.3875 | Close runner-up |
+| Neural Network | 0.7169 | 0.3182 | 0.3884 | 3-layer MLP + BatchNorm |
+| Decision Tree | 0.7129 | 0.3232 | 0.3953 | Entropy criterion |
+| KNN | 0.7101 | 0.3266 | 0.4002 | Distance-weighted, Manhattan |
+| CatBoost | 0.7059 | 0.3294 | 0.4001 | Tuned depth 8 |
+| AdaBoost | 0.6618 | 0.3844 | 0.4770 | Weakest performer |
+
+Evaluated on a 20% held-out test split from 944,182 total records. **XGBoost wins decisively on continuous error metrics (MAE/MSE)** while Random Forest and XGBoost are neck-and-neck on raw accuracy — confirming that **tree-based ensembles dominate this feature space**, but the neural network and LightGBM remain strong contenders.
+
+### Per-Class Performance (XGBoost)
+
+| Class | Precision | Recall | F1-score | Support |
+|---|---|---|---|---|
+| 0 (Good) | 0.79 | 0.82 | 0.81 | 69,987 |
+| 1 (Moderate) | 0.70 | 0.68 | 0.69 | 57,664 |
+| 2 (Unhealthy) | 0.69 | 0.67 | 0.68 | 26,646 |
+
+---
+
+## 📊 Dataset
+
+- **Source:** [Air Quality Index of Bangladesh (Kaggle)](https://www.kaggle.com/datasets) — `air_quality_index_dataset.xlsx`
+- **Size:** 944,182 records across 16 monitoring stations
+- **Task:** Multiclass classification — **Good / Moderate / Unhealthy** (3 classes, based on PM2.5 thresholds)
+- **Class distribution:** Imbalanced — Good: 350,697 · Moderate: 287,490 · Unhealthy: 133,298
+- **Locations:** Rajshahi, BARC, Gazipur, Darussalam, Agrabad Chittagong, Barishal, Khulna, Sylhet, TV st-Chittagong, Narayonganj, Sangsad, Rangpur, Cumilla, Mymansingh, Narsingdi, Savar
+
+### Raw Features (23 columns)
+
+| Group | Features |
+|---|---|
+| Temporal | Date, Time, Location |
+| Pollutants | SO2, NO, NO2, NOX, CO, CO 8hr, O3, O3 8hr, PM2.5, PM10 |
+| Weather | Wind Speed, Wind Dir, Temperature, RH, Solar Rad, BP, Rain, V Wind Speed |
+
+---
+
+## 🧹 Data Cleaning
+
+- **Columns dropped (16):** `Unnamed: 20`, `Unnamed: 21`, `Rain`, `V Wind Speed`, `CO 8hr`, `O3 8hr`, `CO`, `NO`, `NO2`, `NOX`, `SO2`, `O3`, `PM10`, `Solar Rad`, `BP`, `Wind Dir` — high null rates (some >85%) made them unusable
+- **Datetime handling:** Date + Time merged into a single `Datetime` column; original columns dropped
+- **Numeric parsing:** Comma-to-dot replacement applied to `PM2.5`, `Temperature`, `RH`, `Wind Speed`, then coerced to float
+- **Missing value strategy:**
+  - Location-wise median imputation for `PM2.5`, `Temperature`, `RH`, `Wind Speed`
+  - Global median fallback for remaining gaps
+- **Final cleaned features (6):** `Temperature`, `RH`, `Wind Speed`, `Hour`, `Day`, `Month`
+
+---
+
+## 🏷️ Feature Engineering
+
+- **AQI category** derived from PM2.5 thresholds:
+  - `PM2.5 ≤ 50` → **Good** (label 0)
+  - `50 < PM2.5 ≤ 100` → **Moderate** (label 1)
+  - `PM2.5 > 100` → **Unhealthy** (label 2)
+- **Temporal features extracted:** Hour, Day, Month, Weekday
+- **Label encoding** applied to AQI categories
+- **Correlation heatmap** revealed temperature and RH as strongest predictors
+
+---
+
+## 🔄 Pipeline
+air_quality_index_dataset.xlsx
+→ Multi-sheet concat + Location tagging (944,182 rows)
+→ Column drop (16 low-value cols)
+→ Datetime construction + Location-wise median imputation
+→ AQI categorization + temporal feature extraction
+→ Correlation analysis (EDA)
+→ Label encoding + StandardScaler
+→ 80/20 train-test split
+→ Model Training:
+Decision Tree | KNN | AdaBoost | XGBoost
+LightGBM | CatBoost | Random Forest | Neural Network (Keras)
+→ Confusion Matrix + MAE/MSE + Classification Report
+→ Yearly trend validation (actual vs predicted)
+
+---
+
+## 🧠 Neural Network Architecture
+Dense(256, ReLU) → BatchNormalization → Dropout(0.1)
+Dense(128, ReLU) → BatchNormalization → Dropout(0.1)
+Dense(64, ReLU)
+Dense(3, Softmax)
+
+
+- **Optimizer:** Adam (lr = 0.0005)
+- **Loss:** Categorical cross-entropy
+- **Callbacks:** EarlyStopping (patience=5), ReduceLROnPlateau (factor=0.5, patience=3)
+- **Test Accuracy:** 71.69% after 39 epochs (best val_loss: 0.6329)
 
 ---
 
 ## 💡 Key Takeaways
 
-1. **Decision Tree is the top performer** (87.44%) — most reliable classifier for this dataset.
-2. **Logistic Regression is a strong runner-up** (84.03%) — better suited for probabilistic risk scoring.
-3. **KNN underperforms** (73.48%) — scaling sensitivity and class imbalance likely hurt performance.
-4. **Preprocessing mattered** — dropping high-null administrative columns and label-encoding categoricals was essential before training.
+1. **XGBoost dominates continuous error metrics** (MAE 0.289, MSE 0.350) — the most reliable classifier for AQI prediction.
+2. **Random Forest achieves highest raw accuracy (75.68%)** but is less stable on ranking-sensitive metrics.
+3. **Tree ensembles beat AdaBoost significantly** — AdaBoost's 66% accuracy suggests sequential weak learners struggle with this noisy, imbalanced data.
+4. **Neural network performs on par with gradient boosting** (71.69%) — but with far more training overhead.
+5. **Temporal + weather features are sufficient** — dropping 16 high-null pollutant columns did not harm performance, confirming PM2.5 is the dominant AQI signal.
+6. **Yearly trend validation** shows predicted averages track actual AQI closely, indicating no temporal drift.
 
 ---
 
 ## 🛠️ Stack
 
-**Python** · **scikit-learn** · Logistic Regression · Decision Tree · KNN · Pandas · Matplotlib
-
-
+**Python** · **scikit-learn** · **XGBoost** · **LightGBM** · **CatBoost** · **TensorFlow / Keras** · **Pandas** · **NumPy** · **Matplotlib** · **Seaborn**
